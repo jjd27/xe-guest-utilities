@@ -331,12 +331,35 @@ func (xs *XenStore) Watch(path string) (<-chan Event, error) {
 			}
 		}
 	}
-	xs.onceWatch.Do(watcher)
+
+	/* Initialise watch queue */
 	xs.muWatch.Lock()
-	defer xs.muWatch.Unlock()
 	if _, ok := xs.watchQueues[path]; !ok {
 		xs.watchQueues[path] = make(chan Event, 100)
 	}
+	xs.muWatch.Unlock()
+
+	/* Start watcher thread if not already started */
+	go xs.onceWatch.Do(watcher)
+
+	/* Send XS_WATCH command */
+	v := []byte(path + "\x00")
+	req := &Packet{
+		OpCode: XS_WATCH,
+		Req:    0,
+		TxID:   xs.tx,
+		Length: uint32(len(v)),
+		Value:  v,
+	}
+	resp, err := xs.DO(req)
+	if err != nil {
+		return nil, err
+	}
+	/* Check for 'OK' response */
+	if !bytes.Equal(resp.Value, []byte("OK\x00")) {
+		return nil, fmt.Errorf("got %s instead of OK in response to WATCH", resp.Value)
+	}
+
 	return xs.watchQueues[path], nil
 }
 
