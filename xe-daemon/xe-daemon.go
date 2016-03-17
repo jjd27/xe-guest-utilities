@@ -78,25 +78,14 @@ func main() {
 		{2, "CollectMemory", collector.CollectMemory},
 	}
 
-	lastUniqueID, err := xs.Read("unique-domain-id")
+	domidChangedEvents, err := xs.Watch("unique-domain-id")
 	if err != nil {
-		logger.Printf("xenstore.Read unique-domain-id error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "xenstore.Watch unique-domain-id error: %v\n", err)
 	}
+	/* Ignore the spurious watch_event */
+	<-domidChangedEvents
 
 	for count := 0; ; count += 1 {
-		uniqueID, err := xs.Read("unique-domain-id")
-		if err != nil {
-			logger.Printf("xenstore.Read unique-domain-id error: %v\n", err)
-			return
-		}
-		if uniqueID != lastUniqueID {
-			// VM has just resume, cache state now invalid
-			lastUniqueID = uniqueID
-			if cx, ok := xs.(*xenstoreclient.CachedXenStore); ok {
-				cx.Clear()
-			}
-		}
-
 		// invoke collectors
 		updated := false
 		for _, collector := range collectors {
@@ -126,6 +115,11 @@ func main() {
 		}
 
 		select {
+		case <-domidChangedEvents:
+			if cx, ok := xs.(*xenstoreclient.CachedXenStore); ok {
+				logger.Printf("Received watch event on unique-domain-id; clearing write-cache\n")
+				cx.Clear()
+			}
 		case <-exitChannel:
 			logger.Printf("Received an interrupt, stopping services...\n")
 			if c, ok := loggerWriter.(io.Closer); ok {
