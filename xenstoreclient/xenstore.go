@@ -49,7 +49,7 @@ type Packet struct {
 
 type Event struct {
 	Token string
-	Data  []byte
+	Path  string
 }
 
 type XenStoreClient interface {
@@ -320,9 +320,8 @@ func (xs *XenStore) Watch(path string) (<-chan Event, error) {
 					parts := strings.SplitN(string(xsdata.Value), "\x00", 2)
 					path := parts[0]
 					token := parts[1]
-					data := []byte(parts[2])
 					if c, ok := xs.watchQueues[path]; ok {
-						c <- Event{token, data}
+						c <- Event{token, path}
 					}
 				default:
 					var b bytes.Buffer
